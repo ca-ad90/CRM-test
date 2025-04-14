@@ -11,7 +11,7 @@ import {
     getFilteredCompanies,
     getFilteredContacts,
     initializeDatabase,
-} from "./db.js";
+} from "./db/index.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
