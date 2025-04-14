@@ -31,19 +31,25 @@
                     </p>
                 </div>
                 <div class="mt-4 sm:mt-0 flex space-x-2">
-                    <button
-                        @click="showEditCompanyModal = true"
-                        class="btn btn-secondary">
-                        <PencilIcon class="h-5 w-5 mr-1 inline" />
-                        Edit
-                    </button>
-                    <button
-                        @click="showDeleteModal = true"
-                        class="btn btn-danger">
-                        <TrashIcon class="h-5 w-5 mr-1 inline" />
-                        Delete
-                    </button>
-                </div>
+    <button
+        @click="showShareModal = true"
+        class="btn btn-secondary">
+        <UserPlusIcon class="h-5 w-5 mr-1 inline" />
+        Share
+    </button>
+    <button
+        @click="showEditCompanyModal = true"
+        class="btn btn-secondary">
+        <PencilIcon class="h-5 w-5 mr-1 inline" />
+        Edit
+    </button>
+    <button
+        @click="showDeleteModal = true"
+        class="btn btn-danger">
+        <TrashIcon class="h-5 w-5 mr-1 inline" />
+        Delete
+    </button>
+</div>
             </div>
 
             <!-- Company Details -->
@@ -89,7 +95,8 @@
                             <p class="whitespace-pre-line">
                                 {{ company.email || "Not specified" }}
                             </p>
-                        </div> <div>
+                        </div>
+                        <div>
                             <h3 class="text-sm font-medium text-gray-500">
                                 Address
                             </h3>
@@ -278,6 +285,14 @@
             :message="`Are you sure you want to delete ${company?.company_name}? This will also delete all associated contacts and their data.`"
             @confirm="deleteCompany"
             @cancel="showDeleteModal = false" />
+
+        <ShareResourceModal
+            v-if="showShareModal"
+            resourceType="company"
+            :resourceId="company?.company_id"
+            @close="showShareModal = false"
+            @shared="fetchCompanyData"
+            @unshared="fetchCompanyData" />
     </div>
 </template>
 
@@ -304,6 +319,13 @@ import MeetingForm from "../components/MeetingForm.vue";
 import CommunicationForm from "../components/CommunicationForm.vue";
 import LoadingSpinner from "../components/LoadingSpinner.vue";
 import DeleteConfirmation from "../components/DeleteConfirmation.vue";
+// Import at the top of the script section
+import { UserPlusIcon } from "@heroicons/vue/24/outline";
+import ShareResourceModal from "../components/ShareResourceModal.vue";
+
+// Add this to the state declarations
+const showShareModal = ref(false);
+
 
 const route = useRoute();
 const router = useRouter();

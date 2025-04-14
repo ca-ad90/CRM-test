@@ -1,8 +1,8 @@
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
-import * as fs from 'node:fs';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import * as fs from "node:fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
 // Database connection singleton
 
 global.db = null;
@@ -18,7 +18,7 @@ async function getDbConnection() {
     // Open the database connection
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const dbPath = path.join(__dirname, "database.sqlite")
+    const dbPath = path.join(__dirname, "database.sqlite");
     global.db = await open({
         filename: dbPath,
         driver: sqlite3.Database,
@@ -38,8 +38,10 @@ export const companiesDb = {
      */
     async getAll() {
         const db = await getDbConnection();
-        let data  = await db.all("SELECT * FROM companies ORDER BY company_name")
-        return data
+        let data = await db.all(
+            "SELECT * FROM companies ORDER BY company_name",
+        );
+        return data;
     },
 
     /**
@@ -66,7 +68,7 @@ export const companiesDb = {
                 company.website,
                 company.address,
                 company.phone,
-                company.email
+                company.email,
             ],
         );
 
@@ -124,14 +126,13 @@ export const contactsDb = {
      */
     async getAll() {
         const db = await getDbConnection();
-        console.log("get all contacts")
+        console.log("get all contacts");
         return db.all(`
       SELECT c.*, co.company_name
       FROM contacts c
       LEFT JOIN companies co ON c.company_id = co.company_id
       ORDER BY c.last_name, c.first_name
     `);
-
     },
 
     /**
@@ -682,7 +683,7 @@ export async function initializeDatabase() {
 export const getFilteredCompanies = async (status) => {
     const db = await getDbConnection();
 
-    if (status === 'contacted') {
+    if (status === "contacted") {
         // Get companies that have been contacted
         return db.all(`
             SELECT DISTINCT c.*
@@ -691,7 +692,7 @@ export const getFilteredCompanies = async (status) => {
             INNER JOIN communications com ON ct.contact_id = com.contact_id
             ORDER BY c.company_name
         `);
-    } else if (status === 'not-contacted') {
+    } else if (status === "not-contacted") {
         // Get companies that have not been contacted
         return db.all(`
     SELECT DISTINCT c.*
@@ -702,9 +703,9 @@ export const getFilteredCompanies = async (status) => {
         FROM communications
     )
     ORDER BY c.company_name        `);
-    }else if (status === 'no-contacts') {
+    } else if (status === "no-contacts") {
         // Get companies that have no contacts
-                return db.all(`
+        return db.all(`
                     SELECT c.*
                     FROM companies c
                     WHERE c.company_id NOT IN (
@@ -713,12 +714,11 @@ export const getFilteredCompanies = async (status) => {
                     )
                     ORDER BY c.company_name
                 `);
-
     } else {
         // Default to all companies if invalid status
         return companiesDb.getAll();
     }
-}
+};
 
 /**
  * Get contacts filtered by communication status or method
@@ -729,7 +729,7 @@ export const getFilteredContacts = async (status) => {
     const db = await getDbConnection();
 
     switch (status) {
-        case 'contacted':
+        case "contacted":
             // Get contacts that have been contacted
             return db.all(`
                 SELECT DISTINCT c.*, co.company_name
@@ -738,7 +738,7 @@ export const getFilteredContacts = async (status) => {
                 INNER JOIN communications com ON c.contact_id = com.contact_id
                 ORDER BY c.last_name, c.first_name
             `);
-        case 'not-contacted':
+        case "not-contacted":
             // Get contacts that have not been contacted
             return db.all(`
                 SELECT c.*, co.company_name
@@ -750,7 +750,7 @@ export const getFilteredContacts = async (status) => {
                 )
                 ORDER BY c.last_name, c.first_name
             `);
-        case 'called':
+        case "called":
             // Get contacts that have been called
             return db.all(`
                 SELECT DISTINCT c.*, co.company_name
@@ -760,7 +760,7 @@ export const getFilteredContacts = async (status) => {
                 WHERE com.contact_method = 'phone' AND com.received_response = 1
                 ORDER BY c.last_name, c.first_name
             `);
-        case 'not-called':
+        case "not-called":
             // Get contacts that have been called
             return db.all(`
           SELECT DISTINCT c.*, co.company_name
@@ -791,7 +791,7 @@ export const getFilteredContacts = async (status) => {
             )
             ORDER BY c.last_name, c.first_name
             `);
-        case 'emailed':
+        case "emailed":
             // Get contacts that have been emailed
             return db.all(`
                 SELECT DISTINCT c.*, co.company_name
@@ -801,10 +801,11 @@ export const getFilteredContacts = async (status) => {
                 WHERE com.contact_method = 'email'
                 ORDER BY c.last_name, c.first_name
             `);
-        case 'no-meetings':
+        case "no-meetings":
             // Get contacts with no upcoming meetings
             const now = new Date().toISOString();
-            return db.all(`
+            return db.all(
+                `
                 SELECT c.*, co.company_name
                 FROM contacts c
                 LEFT JOIN companies co ON c.company_id = co.company_id
@@ -814,11 +815,636 @@ export const getFilteredContacts = async (status) => {
                     WHERE m.meeting_date > ? AND m.meeting_status = 'scheduled'
                 )
                 ORDER BY c.last_name, c.first_name
-            `, now);
+            `,
+                now,
+            );
         default:
             // Default to all contacts if invalid status
             return contactsDb.getAll();
-    }}
+    }
+};
+
+/**
+ * User related database operations
+ */
+export const usersDb = {
+    /**
+     * Get all users
+     * @returns {Promise<Array>} Array of user objects
+     */
+    async getAll() {
+        const db = await getDbConnection();
+        return db.all("SELECT * FROM users ORDER BY username");
+    },
+
+    /**
+     * Get a user by ID
+     * @param {number} id - The user ID
+     * @returns {Promise<object>} The user object
+     */
+    async getById(id) {
+        const db = await getDbConnection();
+        return db.get("SELECT * FROM users WHERE user_id = ?", id);
+    },
+
+    /**
+     * Get a user by username
+     * @param {string} username - The username
+     * @returns {Promise<object>} The user object
+     */
+    async getByUsername(username) {
+        const db = await getDbConnection();
+        return db.get("SELECT * FROM users WHERE username = ?", username);
+    },
+
+    /**
+     * Create a new user
+     * @param {object} user - The user data
+     * @returns {Promise<object>} The created user with ID
+     */
+    async create(user) {
+        const db = await getDbConnection();
+        const result = await db.run("INSERT INTO users (username) VALUES (?)", [
+            user.username,
+        ]);
+
+        return {
+            user_id: result.lastID,
+            ...user,
+        };
+    },
+
+    /**
+     * Update a user's last login time
+     * @param {number} id - The user ID
+     * @returns {Promise<boolean>} Success status
+     */
+    async updateLastLogin(id) {
+        const db = await getDbConnection();
+        const result = await db.run(
+            "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?",
+            [id],
+        );
+
+        return result.changes > 0;
+    },
+
+    /**
+     * Delete a user
+     * @param {number} id - The user ID
+     * @returns {Promise<boolean>} Success status
+     */
+    async delete(id) {
+        const db = await getDbConnection();
+        const result = await db.run("DELETE FROM users WHERE user_id = ?", id);
+        return result.changes > 0;
+    },
+};
+
+/**
+ * User permissions related database operations
+ */
+export const userPermissionsDb = {
+    /**
+     * Share a company with a user
+     * @param {number} companyId - The company ID
+     * @param {number} userId - The user ID
+     * @param {boolean} isOwner - Whether the user is the owner
+     * @returns {Promise<boolean>} Success status
+     */
+    async shareCompany(companyId, userId, isOwner = false) {
+        const db = await getDbConnection();
+        try {
+            await db.run(
+                "INSERT INTO user_companies (company_id, user_id, is_owner) VALUES (?, ?, ?)",
+                [companyId, userId, isOwner ? 1 : 0],
+            );
+            return true;
+        } catch (error) {
+            console.error("Error sharing company:", error);
+            return false;
+        }
+    },
+
+    /**
+     * Share a contact with a user
+     * @param {number} contactId - The contact ID
+     * @param {number} userId - The user ID
+     * @param {boolean} isOwner - Whether the user is the owner
+     * @returns {Promise<boolean>} Success status
+     */
+    async shareContact(contactId, userId, isOwner = false) {
+        const db = await getDbConnection();
+        try {
+            await db.run(
+                "INSERT INTO user_contacts (contact_id, user_id, is_owner) VALUES (?, ?, ?)",
+                [contactId, userId, isOwner ? 1 : 0],
+            );
+            return true;
+        } catch (error) {
+            console.error("Error sharing contact:", error);
+            return false;
+        }
+    },
+
+    /**
+     * Share a meeting with a user
+     * @param {number} meetingId - The meeting ID
+     * @param {number} userId - The user ID
+     * @param {boolean} isOwner - Whether the user is the owner
+     * @returns {Promise<boolean>} Success status
+     */
+    async shareMeeting(meetingId, userId, isOwner = false) {
+        const db = await getDbConnection();
+        try {
+            await db.run(
+                "INSERT INTO user_meetings (meeting_id, user_id, is_owner) VALUES (?, ?, ?)",
+                [meetingId, userId, isOwner ? 1 : 0],
+            );
+            return true;
+        } catch (error) {
+            console.error("Error sharing meeting:", error);
+            return false;
+        }
+    },
+
+    /**
+     * Share a communication with a user
+     * @param {number} communicationId - The communication ID
+     * @param {number} userId - The user ID
+     * @param {boolean} isOwner - Whether the user is the owner
+     * @returns {Promise<boolean>} Success status
+     */
+    async shareCommunication(communicationId, userId, isOwner = false) {
+        const db = await getDbConnection();
+        try {
+            await db.run(
+                "INSERT INTO user_communications (communication_id, user_id, is_owner) VALUES (?, ?, ?)",
+                [communicationId, userId, isOwner ? 1 : 0],
+            );
+            return true;
+        } catch (error) {
+            console.error("Error sharing communication:", error);
+            return false;
+        }
+    },
+
+    /**
+     * Remove company sharing for a user
+     * @param {number} companyId - The company ID
+     * @param {number} userId - The user ID
+     * @returns {Promise<boolean>} Success status
+     */
+    async unshareCompany(companyId, userId) {
+        const db = await getDbConnection();
+        const result = await db.run(
+            "DELETE FROM user_companies WHERE company_id = ? AND user_id = ? AND is_owner = 0",
+            [companyId, userId],
+        );
+        return result.changes > 0;
+    },
+
+    /**
+     * Remove contact sharing for a user
+     * @param {number} contactId - The contact ID
+     * @param {number} userId - The user ID
+     * @returns {Promise<boolean>} Success status
+     */
+    async unshareContact(contactId, userId) {
+        const db = await getDbConnection();
+        const result = await db.run(
+            "DELETE FROM user_contacts WHERE contact_id = ? AND user_id = ? AND is_owner = 0",
+            [contactId, userId],
+        );
+        return result.changes > 0;
+    },
+
+    /**
+     * Remove meeting sharing for a user
+     * @param {number} meetingId - The meeting ID
+     * @param {number} userId - The user ID
+     * @returns {Promise<boolean>} Success status
+     */
+    async unshareMeeting(meetingId, userId) {
+        const db = await getDbConnection();
+        const result = await db.run(
+            "DELETE FROM user_meetings WHERE meeting_id = ? AND user_id = ? AND is_owner = 0",
+            [meetingId, userId],
+        );
+        return result.changes > 0;
+    },
+
+    /**
+     * Remove communication sharing for a user
+     * @param {number} communicationId - The communication ID
+     * @param {number} userId - The user ID
+     * @returns {Promise<boolean>} Success status
+     */
+    async unshareCommunication(communicationId, userId) {
+        const db = await getDbConnection();
+        const result = await db.run(
+            "DELETE FROM user_communications WHERE communication_id = ? AND user_id = ? AND is_owner = 0",
+            [communicationId, userId],
+        );
+        return result.changes > 0;
+    },
+
+    /**
+     * Get companies accessible by a user
+     * @param {number} userId - The user ID
+     * @returns {Promise<Array>} Array of company objects
+     */
+    async getUserCompanies(userId) {
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT c.*, uc.is_owner
+        FROM companies c
+        JOIN user_companies uc ON c.company_id = uc.company_id
+        WHERE uc.user_id = ?
+        ORDER BY c.company_name
+      `,
+            userId,
+        );
+    },
+
+    /**
+     * Get contacts accessible by a user
+     * @param {number} userId - The user ID
+     * @returns {Promise<Array>} Array of contact objects
+     */
+    async getUserContacts(userId) {
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT c.*, co.company_name, uc.is_owner
+        FROM contacts c
+        LEFT JOIN companies co ON c.company_id = co.company_id
+        JOIN user_contacts uc ON c.contact_id = uc.contact_id
+        WHERE uc.user_id = ?
+        ORDER BY c.last_name, c.first_name
+      `,
+            userId,
+        );
+    },
+
+    /**
+     * Get meetings accessible by a user
+     * @param {number} userId - The user ID
+     * @returns {Promise<Array>} Array of meeting objects
+     */
+    async getUserMeetings(userId) {
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT m.*, c.first_name, c.last_name, co.company_name, um.is_owner
+        FROM meetings m
+        JOIN contacts c ON m.contact_id = c.contact_id
+        LEFT JOIN companies co ON c.company_id = co.company_id
+        JOIN user_meetings um ON m.meeting_id = um.meeting_id
+        WHERE um.user_id = ?
+        ORDER BY m.meeting_date DESC
+      `,
+            userId,
+        );
+    },
+
+    /**
+     * Get communications accessible by a user
+     * @param {number} userId - The user ID
+     * @returns {Promise<Array>} Array of communication objects
+     */
+    async getUserCommunications(userId) {
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT com.*, uc.is_owner
+        FROM communications com
+        JOIN user_communications uc ON com.communication_id = uc.communication_id
+        WHERE uc.user_id = ?
+        ORDER BY com.date_contacted DESC
+      `,
+            userId,
+        );
+    },
+
+    /**
+     * Check if user has access to a company
+     * @param {number} userId - The user ID
+     * @param {number} companyId - The company ID
+     * @returns {Promise<boolean>} Whether the user has access
+     */
+    async canAccessCompany(userId, companyId) {
+        const db = await getDbConnection();
+        const result = await db.get(
+            "SELECT 1 FROM user_companies WHERE user_id = ? AND company_id = ?",
+            [userId, companyId],
+        );
+        return result ? true : false;
+    },
+
+    /**
+     * Check if user has access to a contact
+     * @param {number} userId - The user ID
+     * @param {number} contactId - The contact ID
+     * @returns {Promise<boolean>} Whether the user has access
+     */
+    async canAccessContact(userId, contactId) {
+        const db = await getDbConnection();
+        const result = await db.get(
+            "SELECT 1 FROM user_contacts WHERE user_id = ? AND contact_id = ?",
+            [userId, contactId],
+        );
+        return result ? true : false;
+    },
+
+    /**
+     * Check if user has access to a meeting
+     * @param {number} userId - The user ID
+     * @param {number} meetingId - The meeting ID
+     * @returns {Promise<boolean>} Whether the user has access
+     */
+    async canAccessMeeting(userId, meetingId) {
+        const db = await getDbConnection();
+        const result = await db.get(
+            "SELECT 1 FROM user_meetings WHERE user_id = ? AND meeting_id = ?",
+            [userId, meetingId],
+        );
+        return result ? true : false;
+    },
+
+    /**
+     * Check if user has access to a communication
+     * @param {number} userId - The user ID
+     * @param {number} communicationId - The communication ID
+     * @returns {Promise<boolean>} Whether the user has access
+     */
+    async canAccessCommunication(userId, communicationId) {
+        const db = await getDbConnection();
+        const result = await db.get(
+            "SELECT 1 FROM user_communications WHERE user_id = ? AND communication_id = ?",
+            [userId, communicationId],
+        );
+        return result ? true : false;
+    },
+
+    /**
+     * Get users who have access to a company
+     * @param {number} companyId - The company ID
+     * @returns {Promise<Array>} Array of user objects
+     */
+    async getCompanyUsers(companyId) {
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT u.*, uc.is_owner
+        FROM users u
+        JOIN user_companies uc ON u.user_id = uc.user_id
+        WHERE uc.company_id = ?
+        ORDER BY u.username
+      `,
+            companyId,
+        );
+    },
+
+    /**
+     * Get users who have access to a contact
+     * @param {number} contactId - The contact ID
+     * @returns {Promise<Array>} Array of user objects
+     */
+    async getContactUsers(contactId) {
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT u.*, uc.is_owner
+        FROM users u
+        JOIN user_contacts uc ON u.user_id = uc.user_id
+        WHERE uc.contact_id = ?
+        ORDER BY u.username
+      `,
+            contactId,
+        );
+    },
+
+    /**
+     * Get users who have access to a meeting
+     * @param {number} meetingId - The meeting ID
+     * @returns {Promise<Array>} Array of user objects
+     */
+    async getMeetingUsers(meetingId) {
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT u.*, um.is_owner
+        FROM users u
+        JOIN user_meetings um ON u.user_id = um.user_id
+        WHERE um.meeting_id = ?
+        ORDER BY u.username
+      `,
+            meetingId,
+        );
+    },
+};
+
+// Modify existing database operations to respect user permissions
+// For example, update the companiesDb.getAll method:
+
+export const updateCompaniesDbForUsers = (companiesDb) => {
+    const originalGetAll = companiesDb.getAll;
+
+    companiesDb.getAll = async function (userId) {
+        if (!userId) {
+            return originalGetAll.call(this);
+        }
+
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT c.*
+        FROM companies c
+        JOIN user_companies uc ON c.company_id = uc.company_id
+        WHERE uc.user_id = ?
+        ORDER BY c.company_name
+      `,
+            userId,
+        );
+    };
+
+    const originalCreate = companiesDb.create;
+
+    companiesDb.create = async function (company, userId) {
+        const result = await originalCreate.call(this, company);
+
+        if (userId) {
+            await userPermissionsDb.shareCompany(
+                result.company_id,
+                userId,
+                true,
+            );
+        }
+
+        return result;
+    };
+};
+
+export const updateContactsDbForUsers = (contactsDb) => {
+    const originalGetAll = contactsDb.getAll;
+
+    contactsDb.getAll = async function (userId) {
+        if (!userId) {
+            return originalGetAll.call(this);
+        }
+
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT c.*, co.company_name
+        FROM contacts c
+        LEFT JOIN companies co ON c.company_id = co.company_id
+        JOIN user_contacts uc ON c.contact_id = uc.contact_id
+        WHERE uc.user_id = ?
+        ORDER BY c.last_name, c.first_name
+      `,
+            userId,
+        );
+    };
+
+    const originalCreate = contactsDb.create;
+
+    contactsDb.create = async function (contact, userId) {
+        const result = await originalCreate.call(this, contact);
+
+        if (userId) {
+            await userPermissionsDb.shareContact(
+                result.contact_id,
+                userId,
+                true,
+            );
+
+            // If this contact belongs to a company, make sure the user has access to that company
+            if (contact.company_id) {
+                const canAccess = await userPermissionsDb.canAccessCompany(
+                    userId,
+                    contact.company_id,
+                );
+                if (!canAccess) {
+                    await userPermissionsDb.shareCompany(
+                        contact.company_id,
+                        userId,
+                        false,
+                    );
+                }
+            }
+        }
+
+        return result;
+    };
+};
+
+export const updateMeetingsDbForUsers = (meetingsDb) => {
+    const originalGetAll = meetingsDb.getAll;
+
+    meetingsDb.getAll = async function (userId) {
+        if (!userId) {
+            return originalGetAll.call(this);
+        }
+
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT m.*, c.first_name, c.last_name, co.company_name
+        FROM meetings m
+        JOIN contacts c ON m.contact_id = c.contact_id
+        LEFT JOIN companies co ON c.company_id = co.company_id
+        JOIN user_meetings um ON m.meeting_id = um.meeting_id
+        WHERE um.user_id = ?
+        ORDER BY m.meeting_date DESC
+      `,
+            userId,
+        );
+    };
+
+    const originalCreate = meetingsDb.create;
+
+    meetingsDb.create = async function (meeting, userId) {
+        const result = await originalCreate.call(this, meeting);
+
+        if (userId) {
+            await userPermissionsDb.shareMeeting(
+                result.meeting_id,
+                userId,
+                true,
+            );
+
+            // Make sure the user has access to the contact involved in this meeting
+            const canAccess = await userPermissionsDb.canAccessContact(
+                userId,
+                meeting.contact_id,
+            );
+            if (!canAccess) {
+                await userPermissionsDb.shareContact(
+                    meeting.contact_id,
+                    userId,
+                    false,
+                );
+            }
+        }
+
+        return result;
+    };
+};
+
+export const updateCommunicationsDbForUsers = (communicationsDb) => {
+    const originalGetByContactId = communicationsDb.getByContactId;
+
+    communicationsDb.getByContactId = async function (contactId, userId) {
+        if (!userId) {
+            return originalGetByContactId.call(this, contactId);
+        }
+
+        const db = await getDbConnection();
+        return db.all(
+            `
+        SELECT c.*
+        FROM communications c
+        JOIN user_communications uc ON c.communication_id = uc.communication_id
+        WHERE c.contact_id = ? AND uc.user_id = ?
+        ORDER BY c.date_contacted DESC
+      `,
+            [contactId, userId],
+        );
+    };
+
+    const originalCreate = communicationsDb.create;
+
+    communicationsDb.create = async function (communication, userId) {
+        const result = await originalCreate.call(this, communication);
+
+        if (userId) {
+            await userPermissionsDb.shareCommunication(
+                result.communication_id,
+                userId,
+                true,
+            );
+
+            // Make sure the user has access to the contact involved in this communication
+            const canAccess = await userPermissionsDb.canAccessContact(
+                userId,
+                communication.contact_id,
+            );
+            if (!canAccess) {
+                await userPermissionsDb.shareContact(
+                    communication.contact_id,
+                    userId,
+                    false,
+                );
+            }
+        }
+
+        return result;
+    };
+};
+
 export default {
     companiesDb,
     contactsDb,
