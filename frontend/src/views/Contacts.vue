@@ -24,6 +24,7 @@
                         <option value="called">Called</option>
                         <option value="not-called">not-called</option>
                         <option value="emailed">Emailed</option>
+                        <option value="no-meetings">No Upcoming Meetings</option>
                     </select>
                 </div>
                 <div class="ml-auto">

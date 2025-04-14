@@ -728,85 +728,97 @@ export const getFilteredCompanies = async (status) => {
 export const getFilteredContacts = async (status) => {
     const db = await getDbConnection();
 
-    if (status === 'contacted') {
-        // Get contacts that have been contacted
-        return db.all(`
-            SELECT DISTINCT c.*, co.company_name
+    switch (status) {
+        case 'contacted':
+            // Get contacts that have been contacted
+            return db.all(`
+                SELECT DISTINCT c.*, co.company_name
+                FROM contacts c
+                LEFT JOIN companies co ON c.company_id = co.company_id
+                INNER JOIN communications com ON c.contact_id = com.contact_id
+                ORDER BY c.last_name, c.first_name
+            `);
+        case 'not-contacted':
+            // Get contacts that have not been contacted
+            return db.all(`
+                SELECT c.*, co.company_name
+                FROM contacts c
+                LEFT JOIN companies co ON c.company_id = co.company_id
+                WHERE c.contact_id NOT IN (
+                    SELECT DISTINCT com.contact_id
+                    FROM communications com
+                )
+                ORDER BY c.last_name, c.first_name
+            `);
+        case 'called':
+            // Get contacts that have been called
+            return db.all(`
+                SELECT DISTINCT c.*, co.company_name
+                FROM contacts c
+                LEFT JOIN companies co ON c.company_id = co.company_id
+                INNER JOIN communications com ON c.contact_id = com.contact_id
+                WHERE com.contact_method = 'phone' AND com.received_response = 1
+                ORDER BY c.last_name, c.first_name
+            `);
+        case 'not-called':
+            // Get contacts that have been called
+            return db.all(`
+          SELECT DISTINCT c.*, co.company_name
             FROM contacts c
             LEFT JOIN companies co ON c.company_id = co.company_id
-            INNER JOIN communications com ON c.contact_id = com.contact_id
-            ORDER BY c.last_name, c.first_name
-        `);
-    } else if (status === 'not-contacted') {
-        // Get contacts that have not been contacted
-        return db.all(`
-            SELECT c.*, co.company_name
-            FROM contacts c
-            LEFT JOIN companies co ON c.company_id = co.company_id
-            WHERE c.contact_id NOT IN (
-                SELECT DISTINCT com.contact_id
-                FROM communications com
-            )
-            ORDER BY c.last_name, c.first_name
-        `);
-    } else if (status === 'called') {
-        // Get contacts that have been called
-        return db.all(`
-            SELECT DISTINCT c.*, co.company_name
-            FROM contacts c
-            LEFT JOIN companies co ON c.company_id = co.company_id
-            INNER JOIN communications com ON c.contact_id = com.contact_id
-            WHERE com.contact_method = 'phone' AND com.received_response = 1
-            ORDER BY c.last_name, c.first_name
-        `);
-
-    }else if (status === 'not-called') {
-        // Get contacts that have been called
-        return db.all(`
-      SELECT DISTINCT c.*, co.company_name
-        FROM contacts c
-        LEFT JOIN companies co ON c.company_id = co.company_id
-        WHERE c.contact_id IN (
-            SELECT DISTINCT contact_id
-            FROM communications
-            WHERE contact_method = 'email'
-        )
-        AND (
-            c.contact_id NOT IN (
+            WHERE c.contact_id IN (
                 SELECT DISTINCT contact_id
                 FROM communications
-                WHERE contact_method = 'phone'
+                WHERE contact_method = 'email'
             )
-            OR
-            c.contact_id IN (
-                SELECT DISTINCT contact_id
-                FROM communications
-                WHERE contact_method = 'phone' AND received_response = 0
-                AND contact_id NOT IN (
+            AND (
+                c.contact_id NOT IN (
                     SELECT DISTINCT contact_id
                     FROM communications
-                    WHERE contact_method = 'phone' AND received_response = 1
+                    WHERE contact_method = 'phone'
+                )
+                OR
+                c.contact_id IN (
+                    SELECT DISTINCT contact_id
+                    FROM communications
+                    WHERE contact_method = 'phone' AND received_response = 0
+                    AND contact_id NOT IN (
+                        SELECT DISTINCT contact_id
+                        FROM communications
+                        WHERE contact_method = 'phone' AND received_response = 1
+                    )
                 )
             )
-        )
-        ORDER BY c.last_name, c.first_name
-
-        `);
-    } else if (status === 'emailed') {
-        // Get contacts that have been emailed
-        return db.all(`
-            SELECT DISTINCT c.*, co.company_name
-            FROM contacts c
-            LEFT JOIN companies co ON c.company_id = co.company_id
-            INNER JOIN communications com ON c.contact_id = com.contact_id
-            WHERE com.contact_method = 'email'
             ORDER BY c.last_name, c.first_name
-        `);
-    } else {
-        // Default to all contacts if invalid status
-        return contactsDb.getAll();
-    }
-}
+            `);
+        case 'emailed':
+            // Get contacts that have been emailed
+            return db.all(`
+                SELECT DISTINCT c.*, co.company_name
+                FROM contacts c
+                LEFT JOIN companies co ON c.company_id = co.company_id
+                INNER JOIN communications com ON c.contact_id = com.contact_id
+                WHERE com.contact_method = 'email'
+                ORDER BY c.last_name, c.first_name
+            `);
+        case 'no-meetings':
+            // Get contacts with no upcoming meetings
+            const now = new Date().toISOString();
+            return db.all(`
+                SELECT c.*, co.company_name
+                FROM contacts c
+                LEFT JOIN companies co ON c.company_id = co.company_id
+                WHERE c.contact_id NOT IN (
+                    SELECT DISTINCT m.contact_id
+                    FROM meetings m
+                    WHERE m.meeting_date > ? AND m.meeting_status = 'scheduled'
+                )
+                ORDER BY c.last_name, c.first_name
+            `, now);
+        default:
+            // Default to all contacts if invalid status
+            return contactsDb.getAll();
+    }}
 export default {
     companiesDb,
     contactsDb,
