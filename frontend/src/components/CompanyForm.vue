@@ -9,16 +9,6 @@
                 class="input"
                 required />
         </div>
-
-        <div>
-            <label for="industry" class="label">Industry</label>
-            <input
-                id="industry"
-                v-model="form.industry"
-                type="text"
-                class="input" />
-        </div>
-
         <div>
             <label for="website" class="label">Website</label>
             <input
@@ -81,7 +71,6 @@ const emit = defineEmits(["submit", "cancel"]);
 
 const form = ref({
     company_name: "",
-    industry: "",
     website: "",
     address: "",
     phone: "",
@@ -92,7 +81,6 @@ onMounted(() => {
     if (props.company) {
         form.value = {
             company_name: props.company.company_name || "",
-            industry: props.company.industry || "",
             website: props.company.website || "",
             address: props.company.address || "",
             phone: props.company.phone || "",

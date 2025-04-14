@@ -4,25 +4,28 @@ import * as fs from 'node:fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 // Database connection singleton
-let db = null;
 
+global.db = null;
 /**
  * Initialize the database connection
  * @returns {Promise<object>} The database connection object
  */
 async function getDbConnection() {
-    if (db) {
-        return db;
+    if (global.db) {
+        return global.db;
     }
 
     // Open the database connection
-    db = await open({
-        filename: "./server/database.sqlite",
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const dbPath = path.join(__dirname, "database.sqlite")
+    global.db = await open({
+        filename: dbPath,
         driver: sqlite3.Database,
     });
 
     console.log("Database connection established");
-    return db;
+    return global.db;
 }
 
 /**
@@ -57,10 +60,9 @@ export const companiesDb = {
     async create(company) {
         const db = await getDbConnection();
         const result = await db.run(
-            "INSERT INTO companies (company_name, industry, website, address,phone,email) VALUES (?, ?, ?, ?,?,?)",
+            "INSERT INTO companies (company_name,  website, address,phone,email) VALUES (?, ?, ?, ?,?,?)",
             [
                 company.company_name,
-                company.industry,
                 company.website,
                 company.address,
                 company.phone,
@@ -83,10 +85,9 @@ export const companiesDb = {
     async update(id, company) {
         const db = await getDbConnection();
         const result = await db.run(
-            "UPDATE companies SET company_name = ?, industry = ?, website = ?, address = ?, phone=?,email=? WHERE company_id = ?",
+            "UPDATE companies SET company_name = ?, website = ?, address = ?, phone=?,email=? WHERE company_id = ?",
             [
                 company.company_name,
-                company.industry,
                 company.website,
                 company.address,
                 company.phone,
@@ -123,12 +124,14 @@ export const contactsDb = {
      */
     async getAll() {
         const db = await getDbConnection();
+        console.log("get all contacts")
         return db.all(`
       SELECT c.*, co.company_name
       FROM contacts c
       LEFT JOIN companies co ON c.company_id = co.company_id
       ORDER BY c.last_name, c.first_name
     `);
+
     },
 
     /**
@@ -614,7 +617,7 @@ export const searchDb = {
         const companies = await db.all(
             `
       SELECT * FROM companies
-      WHERE company_name LIKE ? OR industry LIKE ? OR website LIKE ? OR address LIKE ?
+      WHERE company_name LIKE ? OR website LIKE ? OR address LIKE ?
       ORDER BY company_name
       LIMIT 20
     `,
@@ -671,7 +674,139 @@ export async function initializeDatabase() {
         console.log("Database schema initialized");
     }
 }
+/**
+ * Get companies filtered by communication status
+ * @param {string} status - Filter type: 'contacted', 'not-contacted'
+ * @returns {Promise<Array>} Array of filtered company objects
+ */
+export const getFilteredCompanies = async (status) => {
+    const db = await getDbConnection();
 
+    if (status === 'contacted') {
+        // Get companies that have been contacted
+        return db.all(`
+            SELECT DISTINCT c.*
+            FROM companies c
+            INNER JOIN contacts ct ON c.company_id = ct.company_id
+            INNER JOIN communications com ON ct.contact_id = com.contact_id
+            ORDER BY c.company_name
+        `);
+    } else if (status === 'not-contacted') {
+        // Get companies that have not been contacted
+        return db.all(`
+    SELECT DISTINCT c.*
+    FROM companies c
+    INNER JOIN contacts ct ON c.company_id = ct.company_id
+    WHERE ct.contact_id NOT IN (
+        SELECT DISTINCT contact_id
+        FROM communications
+    )
+    ORDER BY c.company_name        `);
+    }else if (status === 'no-contacts') {
+        // Get companies that have no contacts
+                return db.all(`
+                    SELECT c.*
+                    FROM companies c
+                    WHERE c.company_id NOT IN (
+                        SELECT DISTINCT company_id
+                        FROM contacts
+                    )
+                    ORDER BY c.company_name
+                `);
+
+    } else {
+        // Default to all companies if invalid status
+        return companiesDb.getAll();
+    }
+}
+
+/**
+ * Get contacts filtered by communication status or method
+ * @param {string} status - Filter type: 'contacted', 'not-contacted', 'called', 'emailed'
+ * @returns {Promise<Array>} Array of filtered contact objects
+ */
+export const getFilteredContacts = async (status) => {
+    const db = await getDbConnection();
+
+    if (status === 'contacted') {
+        // Get contacts that have been contacted
+        return db.all(`
+            SELECT DISTINCT c.*, co.company_name
+            FROM contacts c
+            LEFT JOIN companies co ON c.company_id = co.company_id
+            INNER JOIN communications com ON c.contact_id = com.contact_id
+            ORDER BY c.last_name, c.first_name
+        `);
+    } else if (status === 'not-contacted') {
+        // Get contacts that have not been contacted
+        return db.all(`
+            SELECT c.*, co.company_name
+            FROM contacts c
+            LEFT JOIN companies co ON c.company_id = co.company_id
+            WHERE c.contact_id NOT IN (
+                SELECT DISTINCT com.contact_id
+                FROM communications com
+            )
+            ORDER BY c.last_name, c.first_name
+        `);
+    } else if (status === 'called') {
+        // Get contacts that have been called
+        return db.all(`
+            SELECT DISTINCT c.*, co.company_name
+            FROM contacts c
+            LEFT JOIN companies co ON c.company_id = co.company_id
+            INNER JOIN communications com ON c.contact_id = com.contact_id
+            WHERE com.contact_method = 'phone' AND com.received_response = 1
+            ORDER BY c.last_name, c.first_name
+        `);
+
+    }else if (status === 'not-called') {
+        // Get contacts that have been called
+        return db.all(`
+      SELECT DISTINCT c.*, co.company_name
+        FROM contacts c
+        LEFT JOIN companies co ON c.company_id = co.company_id
+        WHERE c.contact_id IN (
+            SELECT DISTINCT contact_id
+            FROM communications
+            WHERE contact_method = 'email'
+        )
+        AND (
+            c.contact_id NOT IN (
+                SELECT DISTINCT contact_id
+                FROM communications
+                WHERE contact_method = 'phone'
+            )
+            OR
+            c.contact_id IN (
+                SELECT DISTINCT contact_id
+                FROM communications
+                WHERE contact_method = 'phone' AND received_response = 0
+                AND contact_id NOT IN (
+                    SELECT DISTINCT contact_id
+                    FROM communications
+                    WHERE contact_method = 'phone' AND received_response = 1
+                )
+            )
+        )
+        ORDER BY c.last_name, c.first_name
+
+        `);
+    } else if (status === 'emailed') {
+        // Get contacts that have been emailed
+        return db.all(`
+            SELECT DISTINCT c.*, co.company_name
+            FROM contacts c
+            LEFT JOIN companies co ON c.company_id = co.company_id
+            INNER JOIN communications com ON c.contact_id = com.contact_id
+            WHERE com.contact_method = 'email'
+            ORDER BY c.last_name, c.first_name
+        `);
+    } else {
+        // Default to all contacts if invalid status
+        return contactsDb.getAll();
+    }
+}
 export default {
     companiesDb,
     contactsDb,
@@ -679,5 +814,7 @@ export default {
     meetingsDb,
     dashboardDb,
     searchDb,
+    getFilteredCompanies,
+    getFilteredContacts,
     initializeDatabase,
 };

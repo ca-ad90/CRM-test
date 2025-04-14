@@ -1,8 +1,8 @@
 <template>
     <form @submit.prevent="submitForm" class="space-y-4">
-        <div>
+        <div  v-if="!props.currentCompany">
             <label for="company_id" class="label">Company*</label>
-            <select
+            <select v-if="!props.currentCompany"
                 id="company_id"
                 v-model="form.company_id"
                 class="input"
@@ -15,6 +15,7 @@
                     {{ company.company_name }}
                 </option>
             </select>
+
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -91,6 +92,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    currentCompany: {
+        type: Object,
+        default: null,
+    },
     preselectedCompanyId: {
         type: [Number, String],
         default: null,
@@ -129,6 +134,9 @@ onMounted(async () => {
         };
     } else if (props.preselectedCompanyId) {
         form.value.company_id = props.preselectedCompanyId;
+    }
+    else if (props.currentCompany) {
+        form.value.company_id = props.currentCompany.company_id;
     }
 });
 

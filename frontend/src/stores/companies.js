@@ -96,5 +96,24 @@ export const useCompanyStore = defineStore("companies", {
                 this.loading = false;
             }
         },
+
+/**
+ * Fetch companies filtered by contact status
+ * @param {string} status - Filter status (contacted, not-contacted)
+ */
+async fetchFilteredCompanies(status) {
+    this.loading = true;
+    console.log("fetchFilteredCompanies", status);
+    try {
+        const response = await axios.get(`/api/companies/filter/${status}`);
+        this.companies = response.data;
+        this.error = null;
+    } catch (err) {
+        this.error = err.message || "Failed to fetch filtered companies";
+        console.error(this.error);
+    } finally {
+        this.loading = false;
+    }
+},
     },
 });

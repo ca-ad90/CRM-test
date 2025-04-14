@@ -8,6 +8,37 @@
             </button>
         </div>
 
+        <!-- Add filter controls -->
+        <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+            <div class="flex flex-wrap items-center gap-4">
+                <div>
+                    <label for="contact-filter" class="label">Contact Status</label>
+                    <select
+                        id="contact-filter"
+                        v-model="filters.contactStatus"
+                        @change="applyFilters"
+                        class="p-2 border border-gray-300 rounded-md">
+                        <option value="">All Companies</option>
+                        <option value="contacted">Contacted</option>
+                        <option value="not-contacted">Not Contacted</option>
+                        <option value="no-contacts">No Contacts</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="companies-filter" class="label">Filter Companies</label>
+                    <input  class="input" type="text" id="companies-filter" v-model="searchQuery">
+                    </input>
+                </div>
+                <div class="ml-auto">
+                    <button
+                        @click="resetFilters"
+                        class="btn btn-secondary mt-6">
+                        Reset Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div v-if="loading" class="py-8">
             <LoadingSpinner />
         </div>
@@ -20,87 +51,33 @@
             </button>
         </div>
         <div v-else class="overflow-x-auto shadow-md rounded-lg">
-            <table class="min-w-full divide-y divide-gray-200 bg-white">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th
-                            scope="col"
-                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Company Name
-                        </th>
-                        <th
-                            scope="col"
-                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Industry
-                        </th>
-                        <th
-                            scope="col"
-                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Contacts
-                        </th>
-                        <th
-                            scope="col"
-                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Website
-                        </th>
-                        <th
-                            scope="col"
-                            class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <tr
-                        v-for="company in companies"
-                        :key="company.company_id"
-                        class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <router-link
-                                :to="`/companies/${company.company_id}`"
-                                class="text-blue-600 hover:underline font-medium">
-                                {{ company.company_name }}
-                            </router-link>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-gray-700">
-                            {{ company.industry || "N/A" }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <router-link
-                                :to="`/companies/${company.company_id}`"
-                                class="text-blue-600 hover:underline">
-                                View Contacts
-                            </router-link>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <a
-                                v-if="company.website"
-                                :href="ensureHttpPrefix(company.website)"
-                                target="_blank"
-                                class="text-blue-600 hover:underline">
-                                {{ formatWebsite(company.website) }}
-                            </a>
-                            <span v-else class="text-gray-500">N/A</span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center">
-                            <div class="flex justify-center space-x-2">
-                                <button
-                                    @click="editCompany(company)"
-                                    class="text-indigo-600 hover:text-indigo-900"
-                                    title="Edit Company">
-                                    <PencilSquareIcon class="h-5 w-5" />
-                                </button>
-                                <button
-                                    @click="confirmDelete(company)"
-                                    class="text-red-600 hover:text-red-900"
-                                    title="Delete Company">
-                                    <TrashIcon class="h-5 w-5" />
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <DataTable :data="companies" :headings="{company_name: 'Company Name', contacts: 'Contacts', website: 'Website'}" :idKey="'company_id'" @toggleAccordion="toggleAccordion">
+            <template #company_name="{item}">
+                <router-link
+                            :to="`/companies/${item.company_id}`"
+                            class="text-blue-600 hover:underline font-medium">
+                            {{ item.company_name }}
+                </router-link>
+            </template>
+            <template #website="{item}">
+                <a :href="item.website" target="_blank" class="text-blue-600 hover:underline">
+                    {{ formatWebsite(item.website) }}
+                </a>
+            </template>
+            <template   #accordion="{item}">
+                <DataTable :data="contactInfo[item.company_id]" :headings="{name: 'Name', email: 'Email', phone: 'Phone', add:'New Contact'}" :idKey="'contact_id'">
+                                <template #heading-add="{heading}">
+                                    <button @click="openContactModal(item)" class="btn btn-primary">Add Contact</button>
+                                </template>
+                                <template #name="{item}">
+                                <router-link :to="`/contacts/${item.contact_id}`" class="text-blue-600 hover:underline">
+                                 {{ `${item.first_name} ${item.last_name}`}}
+                                </router-link>
+
+                                </template>
+                </DataTable>
+            </template>
+            </DataTable>
         </div>
 
         <!-- Add/Edit Company Modal -->
@@ -119,6 +96,24 @@
                     :company="currentCompany"
                     :is-editing="showEditCompanyModal"
                     @submit="handleCompanySubmit"
+                    @cancel="closeModals" />
+            </div>
+        </div>
+
+        <div
+            v-if="showAddContactModal"
+            class="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+                <h2 class="text-xl font-bold mb-4">
+                    {{
+                             "Add New Contact"
+                    }}
+                </h2>
+                <ContactForm
+                    :contact="currentContact"
+                    :currentCompany="currentCompany"
+                    :is-editing="false"
+                    @submit="handleContactSubmit"
                     @cancel="closeModals" />
             </div>
         </div>
@@ -142,22 +137,46 @@ import {
 } from "@heroicons/vue/24/outline";
 import { useCompanyStore } from "../stores/companies";
 import CompanyForm from "../components/CompanyForm.vue";
+import ContactForm from "../components/ContactForm.vue";
+import DataTable from "../components/DataTable.vue";
 import LoadingSpinner from "../components/LoadingSpinner.vue";
 import DeleteConfirmation from "../components/DeleteConfirmation.vue";
-
+import axios from "axios";
+import { useContactStore } from "../stores/contacts";
+const contactStore = useContactStore();
 const companyStore = useCompanyStore();
 const toast = useToast();
 
 // State
 const showAddCompanyModal = ref(false);
+const showAddContactModal = ref(false);
+const currentContact = ref(false);
 const showEditCompanyModal = ref(false);
 const showDeleteModal = ref(false);
 const currentCompany = ref(null);
 const loading = ref(true);
-
+const filteredCompanies = ref([]);
+const filters = ref({
+    contactStatus: "",
+});
+const searchQuery = ref("");
+const contactInfo = ref([{}]);
 // Computed
-const companies = computed(() => companyStore.companies);
+const companies = computed(() => {
+    if (filteredCompanies.value.length > 0) {
+        return filteredCompanies.value;
+    }
+    if(searchQuery.value) {
+        return companyStore.companies.filter((company) => {
+            let strings = searchQuery.value.toLowerCase().split(' ')
+            return strings.every((s) => {
+                return company.company_name.toLowerCase().includes(s)
+            })
+    })
+    }
 
+    return companyStore.companies;
+});
 // Methods
 const ensureHttpPrefix = (url) => {
     if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
@@ -165,7 +184,18 @@ const ensureHttpPrefix = (url) => {
     }
     return url;
 };
-
+const toggleAccordion = async (id) => {
+        await contactStore.fetchContactsByCompany(id);
+        contactInfo.value[id] = contactStore.companyContacts; //contactStore.companyContacts
+        console.log(contactInfo.value[id]);
+}
+const openContactModal = (company) => {
+    console.log(company)
+    currentCompany.value = company;
+    showAddContactModal.value = true;
+};
+const getContactInfo = async (companyId) => {
+     }
 const formatWebsite = (url) => {
     if (!url) return "";
     return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -186,6 +216,20 @@ const closeModals = () => {
     showEditCompanyModal.value = false;
     showDeleteModal.value = false;
     currentCompany.value = null;
+    showAddContactModal.value = false;
+    currentContact.value = null;
+};
+const handleContactSubmit = async (formData) => {
+    try {
+        console.log(formData)
+            await contactStore.createContact(formData);
+            toast.success("Contact created successfully");
+        closeModals();
+            await contactStore.fetchContacts(); // Refresh all contact
+    } catch (error) {
+        toast.error("An error occurred: " + (error.message || "Unknown error"));
+    }
+    toggleAccordion(formData.company_id)
 };
 
 const handleCompanySubmit = async (formData) => {
@@ -201,6 +245,11 @@ const handleCompanySubmit = async (formData) => {
             toast.success("Company created successfully");
         }
         closeModals();
+        if (filters.contactStatus) {
+            applyFilters(); // Refresh filtered list if filters are active
+        } else {
+            await companyStore.fetchCompanies(); // Refresh all companies
+        }
     } catch (error) {
         toast.error("An error occurred: " + (error.message || "Unknown error"));
     }
@@ -211,6 +260,9 @@ const deleteCompany = async () => {
         await companyStore.deleteCompany(currentCompany.value.company_id);
         toast.success("Company deleted successfully");
         closeModals();
+        if (filters.contactStatus) {
+            applyFilters(); // Refresh filtered list if filters are active
+        }
     } catch (error) {
         toast.error(
             "Failed to delete company: " + (error.message || "Unknown error"),
@@ -218,8 +270,44 @@ const deleteCompany = async () => {
     }
 };
 
-// Lifecycle hooks
-onMounted(async () => {
+// New functions for filtering
+const applyFilters = async () => {
+    console.log("applyFilters", filters.value);
+    loading.value = true;
+    try {
+        console.log("1Applying filters:", filters.value.contactStatus)
+        if (filters.value.contactStatus) {
+            console.log("2Applying filters:", filters.value.contactStatus);
+            const response = await axios.get(
+                `/api/companies/filter/${filters.value.contactStatus}`,
+            );
+            console.log("response",response)
+            filteredCompanies.value = response.data;
+        } else {
+            filteredCompanies.value = [];
+            await companyStore.fetchCompanies();
+        }
+    } catch (error) {
+        console.error("Error applying filters:", error);
+        toast.error(
+            "Failed to apply filters: " + (error.message || "Unknown error"),
+        );
+        filteredCompanies.value = [];
+    } finally {
+        loading.value = false;
+    }
+};
+
+const resetFilters = async () => {
+    filters.value = {
+        contactStatus: "",
+    };
+    filteredCompanies.value = [];
+    await fetchCompanies();
+};
+
+const fetchCompanies = async () => {
+    loading.value = true;
     try {
         await companyStore.fetchCompanies();
     } catch (error) {
@@ -229,5 +317,10 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
+};
+
+// Lifecycle hooks
+onMounted(async () => {
+    await fetchCompanies();
 });
 </script>

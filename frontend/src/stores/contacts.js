@@ -38,14 +38,37 @@ export const useContactStore = defineStore("contacts", {
         },
         async fetchContactsByCompany(companyId) {
             this.loading = true;
+            let data
             try {
                 const response = await axios.get(
                     `/api/companies/${companyId}/contacts`,
                 );
-                this.companyContacts = response.data;
+                data = response.data
+                this.companyContacts = data;
                 this.error = null;
             } catch (err) {
                 this.error = err.message || "Failed to fetch company contacts";
+                console.error(this.error);
+                return null
+            } finally {
+                this.loading = false;
+                return data
+            }
+        },
+        /**
+         * Fetch contacts filtered by communication status
+         * @param {string} status - Filter status (contacted, not-contacted, called, emailed)
+         */
+        async fetchFilteredContacts(status) {
+            this.loading = true;
+            try {
+                const response = await axios.get(
+                    `/api/contacts/filter/${status}`,
+                );
+                this.contacts = response.data;
+                this.error = null;
+            } catch (err) {
+                this.error = err.message || "Failed to fetch filtered contacts";
                 console.error(this.error);
             } finally {
                 this.loading = false;

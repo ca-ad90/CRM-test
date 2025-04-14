@@ -8,6 +8,34 @@
             </button>
         </div>
 
+        <!-- Add filter controls -->
+        <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+            <div class="flex flex-wrap items-center gap-4">
+                <div>
+                    <label for="contact-filter" class="label">Contact Status</label>
+                    <select
+                        id="contact-filter"
+                        v-model="filters.contactStatus"
+                        @change="applyFilters"
+                        class="p-2 border border-gray-300 rounded-md">
+                        <option value="">All Contacts</option>
+                        <option value="contacted">Contacted</option>
+                        <option value="not-contacted">Not Contacted</option>
+                        <option value="called">Called</option>
+                        <option value="not-called">not-called</option>
+                        <option value="emailed">Emailed</option>
+                    </select>
+                </div>
+                <div class="ml-auto">
+                    <button
+                        @click="resetFilters"
+                        class="btn btn-secondary mt-6">
+                        Reset Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div v-if="loading" class="py-8">
             <LoadingSpinner />
         </div>
@@ -20,6 +48,26 @@
             </button>
         </div>
         <div v-else class="overflow-x-auto shadow-md rounded-lg">
+            <DataTable :data="contacts" :headings="{first_name: 'Name', company_name: 'Company', position: 'Position', email: 'Email', phone: 'Phone'}" :idKey="'contact_id'" v-slots="{orderKey:'first_name'}" @toggleAccordion="toggleAccordion">
+                <template #heading-name="{heading,orderKey='orderKey'}">
+                </template>
+                <template #first_name="{item,index}">
+                    <router-link :to="`/contacts/${item.contact_id}`" class="text-blue-600 hover:underline">
+                     {{ item.first_name }} {{ item.last_name }}
+                    </router-link>
+                </template>
+                <template #company_name="{item}">
+                    <router-link v-if="item.company_id" :to="`/companies/${item.company_id}`" class="text-blue-600 hover:underline">
+                        {{ item.company_name || "N/A" }}
+                    </router-link>
+                    <span v-else class="text-gray-500">N/A</span>
+                </template>
+                <template #accordion="{item}">
+                    <DataTable :data="communicationInfo[item.contact_id]" :headings="{contact_method: 'Type',date_contacted: 'Date', received_response: 'Answer',response_date: 'Response Date'}" :idKey="'contact_id'">
+
+            </DataTable></template>
+            </DataTable>
+            <!--
             <table class="min-w-full divide-y divide-gray-200 bg-white">
                 <thead class="bg-gray-50">
                     <tr>
@@ -115,7 +163,7 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+            </table>-->
         </div>
 
         <!-- Add/Edit Contact Modal -->
@@ -157,12 +205,17 @@ import {
     EyeIcon,
 } from "@heroicons/vue/24/outline";
 import { useContactStore } from "../stores/contacts";
+import { useCommunicationStore } from "../stores/communications";
 import ContactForm from "../components/ContactForm.vue";
 import LoadingSpinner from "../components/LoadingSpinner.vue";
 import DeleteConfirmation from "../components/DeleteConfirmation.vue";
+import axios from "axios";
+import DataTable from "../components/DataTable.vue";
 
 const contactStore = useContactStore();
+const communicationStore = useCommunicationStore();
 const toast = useToast();
+
 
 // State
 const showAddContactModal = ref(false);
@@ -170,15 +223,34 @@ const showEditContactModal = ref(false);
 const showDeleteModal = ref(false);
 const currentContact = ref(null);
 const loading = ref(true);
+const filteredContacts = ref([]);
+const filters = ref({
+    contactStatus: "",
+});
+const communicationInfo = ref([{}]);
 
 // Computed
-const contacts = computed(() => contactStore.contacts);
+const contacts = computed(() => {
+    if (filteredContacts.value.length > 0) {
+        return filteredContacts.value;
+    }
+    return contactStore.contacts;
+});
 
 // Methods
 const editContact = (contact) => {
     currentContact.value = { ...contact };
     showEditContactModal.value = true;
 };
+const toggleAccordion = async (id) => {
+    if (communicationInfo.value[id]) {
+        console.log(communicationInfo.value[id]);
+    } else {
+        await communicationStore.fetchCommunicationsByContact(id);
+        communicationInfo.value[id] = communicationStore.contactCommunications; //contactStore.companyContacts
+        console.log(communicationInfo.value[id]);
+    }
+}
 
 const confirmDelete = (contact) => {
     currentContact.value = contact;
@@ -205,6 +277,11 @@ const handleContactSubmit = async (formData) => {
             toast.success("Contact created successfully");
         }
         closeModals();
+        if (filters.contactStatus) {
+            applyFilters(); // Refresh filtered list if filters are active
+        } else {
+            await contactStore.fetchContacts(); // Refresh all contacts
+        }
     } catch (error) {
         toast.error("An error occurred: " + (error.message || "Unknown error"));
     }
@@ -215,6 +292,9 @@ const deleteContact = async () => {
         await contactStore.deleteContact(currentContact.value.contact_id);
         toast.success("Contact deleted successfully");
         closeModals();
+        if (filters.contactStatus) {
+            applyFilters(); // Refresh filtered list if filters are active
+        }
     } catch (error) {
         toast.error(
             "Failed to delete contact: " + (error.message || "Unknown error"),
@@ -222,8 +302,35 @@ const deleteContact = async () => {
     }
 };
 
-// Lifecycle hooks
-onMounted(async () => {
+// New functions for filtering
+const applyFilters = async () => {
+    loading.value = true;
+    try {
+        if (filters.value.contactStatus) {
+            const response = await axios.get(`/api/contacts/filter/${filters.value.contactStatus}`);
+            filteredContacts.value = response.data;
+        } else {
+            filteredContacts.value = [];
+            await contactStore.fetchContacts();
+        }
+    } catch (error) {
+        toast.error("Failed to apply filters: " + (error.message || "Unknown error"));
+        filteredContacts.value = [];
+    } finally {
+        loading.value = false;
+    }
+};
+
+const resetFilters = async () => {
+    filters.value = {
+        contactStatus: "",
+    };
+    filteredContacts.value = [];
+    await fetchContacts();
+};
+
+const fetchContacts = async () => {
+    loading.value = true;
     try {
         await contactStore.fetchContacts();
     } catch (error) {
@@ -233,5 +340,10 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
+};
+
+// Lifecycle hooks
+onMounted(async () => {
+    await fetchContacts();
 });
 </script>

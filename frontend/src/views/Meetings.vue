@@ -132,7 +132,7 @@
                                 class="text-blue-600 hover:underline">
                                 {{ meeting.company_name || "N/A" }}
                             </router-link>
-                            <span v-else class="text-gray-500">N/A</span>
+                            <span v-else class="text-gray-500">  {{ meeting.company_name || "N/A" }}</span>
                         </td>
                         <td
                             class="px-6 py-4 whitespace-nowrap text-gray-700 capitalize">

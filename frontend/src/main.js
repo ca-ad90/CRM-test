@@ -7,6 +7,7 @@ import router from "./router";
 import "./index.css";
 
 const app = createApp(App);
+app.config.globalProperties.$log = console.log
 
 app.use(createPinia());
 app.use(router);

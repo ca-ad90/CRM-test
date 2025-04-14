@@ -8,6 +8,8 @@ import {
     meetingsDb,
     dashboardDb,
     searchDb,
+    getFilteredCompanies,
+    getFilteredContacts,
     initializeDatabase,
 } from "./db.js";
 
@@ -44,6 +46,7 @@ const createDynamicRoutes = (router, resource, dbOperations) => {
         console.log(`Get all ${resource}`);
         try {
             const data = await dbOperations.getAll();
+            console.log(data);
             res.json(data);
         } catch (error) {
             next(error);
@@ -257,7 +260,28 @@ apiRouter.get("/search", async (req, res, next) => {
         next(error);
     }
 });
+// Filtered companies endpoint
+apiRouter.get("/companies/filter/:status", async (req, res, next) => {
 
+    try {
+        const status = req.params.status;
+        const companies = await getFilteredCompanies(status);
+        res.json(companies);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Filtered contacts endpoint
+apiRouter.get("/contacts/filter/:status", async (req, res, next) => {
+    try {
+        const status = req.params.status;
+        const contacts = await getFilteredContacts(status);
+        res.json(contacts);
+    } catch (error) {
+        next(error);
+    }
+});
 // Mount API router
 app.use("/api", apiRouter);
 
