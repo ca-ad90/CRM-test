@@ -17,7 +17,7 @@ export async function getDbConnection() {
     // Open the database connection
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const dbPath = path.join(__dirname, "database.sqlite")
+    const dbPath = path.join("./", "database.sqlite")
     global.db = await open({
         filename: dbPath,
         driver: sqlite3.Database,
@@ -100,7 +100,6 @@ export const tables = {
   },
 };
 
-
 export const create = async (tableName, data) => {
   const db = await getDbConnection();
   const dataResult = await db.run(
@@ -109,7 +108,6 @@ export const create = async (tableName, data) => {
 VALUES (${tables[tableName].map(() => "?").join(", ")})`,
       [{ ...data }],
   );
-  const dataId = dataResult.lastID;
 
   return {
       contact_id: result.lastID,
@@ -125,5 +123,4 @@ export const userAccessTable = async (tableName, dataId, userId, isOwner = 1) =>
       VALUES (${tables[tableName].map(() => "?").join(", ")})`,
       [{ user_id: userId, [idName]: dataId, is_owner: isOwner }],
   );
-  const dataId = dataResult.lastID;
 };

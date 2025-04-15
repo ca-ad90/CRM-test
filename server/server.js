@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
+import cookieParser from "cookie-parser";
+import dotenv from 'dotenv';
 import {
     companiesDb,
     contactsDb,
@@ -12,13 +14,26 @@ import {
     getFilteredContacts,
     initializeDatabase,
 } from "./db/index.js";
+import { usersDb } from "./db/users.js";
+import { tokensDb } from "./db/tokens.js";
+import { authenticate, optionalAuth } from "./middleware/auth.js";
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// CORS configuration to allow credentials
+const corsOptions = {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 app.use(morgan("dev"));
 
 // Initialize database
@@ -26,6 +41,18 @@ app.use(morgan("dev"));
     try {
         await initializeDatabase();
         console.log("Database initialized successfully");
+
+        // Schedule token cleanup (every hour)
+        setInterval(async () => {
+            try {
+                const deleted = await tokensDb.cleanupExpiredTokens();
+                if (deleted > 0) {
+                    console.log(`Cleaned up ${deleted} expired tokens`);
+                }
+            } catch (error) {
+                console.error("Error cleaning up tokens:", error);
+            }
+        }, 60 * 60 * 1000);
     } catch (error) {
         console.error("Failed to initialize database:", error);
     }
@@ -39,30 +66,195 @@ const errorHandler = (err, req, res, next) => {
     });
 };
 
-// Dynamic route handler creator
+// Auth routes
+const authRouter = express.Router();
+
+// Register route
+authRouter.post("/register", async (req, res, next) => {
+    console.log("Registering user...");
+    try {
+        const { username, email, password } = req.body;
+        console.log(username, email, password);
+        if (!username || !email || !password) {
+            return res.status(400).json({ error: "Username, email and password are required" });
+        }
+
+        // Check if user already exists
+        const userExists = await usersDb.checkUserExists(username, email);
+        if (userExists.exists) {
+            return res.status(409).json({
+                error: `A user with this ${userExists.field} already exists`
+            });
+        }
+
+        // Create user
+        const user = await usersDb.create({ username, email, password });
+
+        // Create token
+        const token = await tokensDb.createToken(user.user_id, 24);
+
+        // Set cookie
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+        });
+
+        res.status(201).json({
+            message: "User registered successfully",
+            user: {
+                user_id: user.user_id,
+                username: user.username,
+                email: user.email
+            },
+            token
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Login route
+authRouter.post("/login", async (req, res, next) => {
+    try {
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ error: "Username and password are required" });
+        }
+
+        // Validate credentials
+        const user = await usersDb.validateCredentials(username, password);
+
+        if (!user) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        // Create token
+        const token = await tokensDb.createToken(user.user_id, 24);
+
+        // Set cookie
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+        });
+
+        res.json({
+            message: "Login successful",
+            user: {
+                user_id: user.user_id,
+                username: user.username,
+                email: user.email
+            },
+            token
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Logout route
+authRouter.post("/logout", optionalAuth, async (req, res, next) => {
+    try {
+        const token = req.cookies?.authToken ||
+                      req.headers.authorization?.replace('Bearer ', '');
+
+        if (token) {
+            await tokensDb.invalidateToken(token);
+        }
+
+        // Clear the cookie
+        res.clearCookie('authToken');
+
+        res.json({ message: "Logged out successfully" });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Get current user
+authRouter.get("/me", authenticate, async (req, res, next) => {
+    try {
+        const user = await usersDb.getById(req.userId);
+
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.json(user);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Change password
+authRouter.post("/change-password", authenticate, async (req, res, next) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: "Current password and new password are required" });
+        }
+
+        // Validate current password
+        const user = await usersDb.getByUsername(req.user.username);
+        const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+
+        if (!isValidPassword) {
+            return res.status(401).json({ error: "Current password is incorrect" });
+        }
+
+        // Update password
+        await usersDb.updatePassword(req.userId, newPassword);
+
+        // Invalidate all existing tokens for this user
+        await tokensDb.invalidateAllUserTokens(req.userId);
+
+        // Create new token
+        const token = await tokensDb.createToken(req.userId, 24);
+
+        // Set cookie
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+        });
+
+        res.json({
+            message: "Password changed successfully",
+            token
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Dynamic route handler creator with authentication
 const createDynamicRoutes = (router, resource, dbOperations) => {
-    // Get all
-    router.get(`/${resource}`, async (req, res, next) => {
-        console.log(`Get all ${resource}`);
+    // Get all (with user filter)
+    router.get(`/${resource}`, authenticate, async (req, res, next) => {
         try {
-            const data = await dbOperations.getAll();
-            console.log(data);
+            const data = await dbOperations.getAll(req.userId);
             res.json(data);
         } catch (error) {
             next(error);
         }
     });
 
-    // Get by ID
-    router.get(`/${resource}/:id`, async (req, res, next) => {
+    // Get by ID (with user access check)
+    router.get(`/${resource}/:id`, authenticate, async (req, res, next) => {
         try {
             const id = parseInt(req.params.id);
-            const data = await dbOperations.getById(id);
+            const data = await dbOperations.getById(id, req.userId);
 
             if (!data) {
                 return res
                     .status(404)
-                    .json({ error: `${resource.slice(0, -1)} not found` });
+                    .json({ error: `${resource.slice(0, -1)} not found or access denied` });
             }
 
             res.json(data);
@@ -71,45 +263,45 @@ const createDynamicRoutes = (router, resource, dbOperations) => {
         }
     });
 
-    // Create
-    router.post(`/${resource}`, async (req, res, next) => {
+    // Create (with user association)
+    router.post(`/${resource}`, authenticate, async (req, res, next) => {
         try {
-            const newItem = await dbOperations.create(req.body);
+            const newItem = await dbOperations.create(req.body, req.userId);
             res.status(201).json(newItem);
         } catch (error) {
             next(error);
         }
     });
 
-    // Update
-    router.put(`/${resource}/:id`, async (req, res, next) => {
+    // Update (with user access check)
+    router.put(`/${resource}/:id`, authenticate, async (req, res, next) => {
         try {
             const id = parseInt(req.params.id);
-            const success = await dbOperations.update(id, req.body);
+            const success = await dbOperations.update(id, req.body, req.userId);
 
             if (!success) {
                 return res
                     .status(404)
-                    .json({ error: `${resource.slice(0, -1)} not found` });
+                    .json({ error: `${resource.slice(0, -1)} not found or access denied` });
             }
 
-            const updatedItem = await dbOperations.getById(id);
+            const updatedItem = await dbOperations.getById(id, req.userId);
             res.json(updatedItem);
         } catch (error) {
             next(error);
         }
     });
 
-    // Delete
-    router.delete(`/${resource}/:id`, async (req, res, next) => {
+    // Delete (with user access check)
+    router.delete(`/${resource}/:id`, authenticate, async (req, res, next) => {
         try {
             const id = parseInt(req.params.id);
-            const success = await dbOperations.delete(id);
+            const success = await dbOperations.delete(id, req.userId);
 
             if (!success) {
                 return res
                     .status(404)
-                    .json({ error: `${resource.slice(0, -1)} not found` });
+                    .json({ error: `${resource.slice(0, -1)} not found or access denied` });
             }
 
             res.status(204).end();
@@ -118,6 +310,7 @@ const createDynamicRoutes = (router, resource, dbOperations) => {
         }
     });
 };
+
 
 // API router
 const apiRouter = express.Router();
@@ -284,6 +477,7 @@ apiRouter.get("/contacts/filter/:status", async (req, res, next) => {
 });
 // Mount API router
 app.use("/api", apiRouter);
+app.use("/api/auth", authRouter);
 
 // Root route
 app.get("/", (req, res) => {
