@@ -43,9 +43,9 @@ export const tokensDb = {
   async validateToken(token) {
     const db = await getDbConnection();
 
-    // Get token with user information
+    // Get token with user information, including admin status
     const result = await db.get(
-      `SELECT t.token_id, t.expires_at, t.is_valid, u.user_id, u.username, u.email
+      `SELECT t.token_id, t.expires_at, t.is_valid, u.user_id, u.username, u.email, u.is_admin
        FROM tokens t
        JOIN user_tokens ut ON t.token_id = ut.token_id
        JOIN users u ON ut.user_id = u.user_id
@@ -70,7 +70,8 @@ export const tokensDb = {
     return {
       user_id: result.user_id,
       username: result.username,
-      email: result.email
+      email: result.email,
+      is_admin: result.is_admin === 1
     };
   },
 

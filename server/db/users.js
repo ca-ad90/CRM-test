@@ -8,9 +8,13 @@ export const usersDb = {
    */
   async getAll() {
     const db = await getDbConnection();
-    return db.all(
-      "SELECT user_id, username, email, created_at, last_login FROM users"
-    );
+    return db.all(`
+      SELECT u.user_id, u.username, u.email, u.created_at, u.last_login, 
+             r.role_name, r.role_id 
+      FROM users u
+      JOIN roles r ON u.role_id = r.role_id
+      ORDER BY u.username
+    `);
   },
 
   /**
@@ -20,10 +24,13 @@ export const usersDb = {
    */
   async getById(id) {
     const db = await getDbConnection();
-    return db.get(
-      "SELECT user_id, username, email, created_at, last_login FROM users WHERE user_id = ?",
-      id
-    );
+    return db.get(`
+      SELECT u.user_id, u.username, u.email, u.created_at, u.last_login, 
+             r.role_name, r.role_id
+      FROM users u
+      JOIN roles r ON u.role_id = r.role_id
+      WHERE u.user_id = ?
+    `, id);
   },
 
   /**
@@ -33,10 +40,12 @@ export const usersDb = {
    */
   async getByUsername(username) {
     const db = await getDbConnection();
-    return db.get(
-      "SELECT * FROM users WHERE username = ?",
-      username
-    );
+    return db.get(`
+      SELECT u.*, r.role_name 
+      FROM users u
+      JOIN roles r ON u.role_id = r.role_id
+      WHERE u.username = ?
+    `, username);
   },
 
   /**
@@ -46,35 +55,78 @@ export const usersDb = {
    */
   async getByEmail(email) {
     const db = await getDbConnection();
-    return db.get(
-      "SELECT * FROM users WHERE email = ?",
-      email
-    );
+    return db.get(`
+      SELECT u.*, r.role_name 
+      FROM users u
+      JOIN roles r ON u.role_id = r.role_id
+      WHERE u.email = ?
+    `, email);
+  },
+
+  /**
+   * Get user permissions
+   * @param {number} userId - The user ID
+   * @returns {Promise<Array>} Array of permission names
+   */
+  async getUserPermissions(userId) {
+    const db = await getDbConnection();
+    const permissions = await db.all(`
+      SELECT permission_name 
+      FROM user_permissions
+      WHERE user_id = ?
+    `, userId);
+    
+    return permissions.map(p => p.permission_name);
   },
 
   /**
    * Create a new user
-   * @param {object} userData - The user data (username, email, password)
+   * @param {object} userData - The user data (username, email, password, role_id)
    * @returns {Promise<object>} The created user with ID (without password)
    */
   async create(userData) {
     const db = await getDbConnection();
 
-    // Hash the password
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(userData.password, saltRounds);
+    // Begin transaction
+    await db.run('BEGIN TRANSACTION');
 
-    const result = await db.run(
-      `INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)`,
-      [userData.username, userData.email, passwordHash]
-    );
+    try {
+      // Hash the password
+      const saltRounds = 10;
+      const passwordHash = await bcrypt.hash(userData.password, saltRounds);
 
-    return {
-      user_id: result.lastID,
-      username: userData.username,
-      email: userData.email,
-      created_at: new Date().toISOString()
-    };
+      // Set default role to 'user' if not specified
+      const role_id = userData.role_id || 2;
+
+      const result = await db.run(
+        `INSERT INTO users (username, email, password_hash, role_id) VALUES (?, ?, ?, ?)`,
+        [userData.username, userData.email, passwordHash, role_id]
+      );
+
+      const userId = result.lastID;
+
+      // Get role name
+      const role = await db.get(
+        "SELECT role_name FROM roles WHERE role_id = ?",
+        role_id
+      );
+
+      // Commit transaction
+      await db.run('COMMIT');
+
+      return {
+        user_id: userId,
+        username: userData.username,
+        email: userData.email,
+        role_id: role_id,
+        role_name: role.role_name,
+        created_at: new Date().toISOString()
+      };
+    } catch (error) {
+      // Rollback transaction in case of error
+      await db.run('ROLLBACK');
+      throw error;
+    }
   },
 
   /**
@@ -116,17 +168,84 @@ export const usersDb = {
   },
 
   /**
+   * Update a user's role
+   * @param {number} id - The user ID
+   * @param {number} roleId - The new role ID
+   * @returns {Promise<boolean>} Success status
+   */
+  async updateRole(id, roleId) {
+    const db = await getDbConnection();
+
+    const result = await db.run(
+      "UPDATE users SET role_id = ? WHERE user_id = ?",
+      [roleId, id]
+    );
+
+    return result.changes > 0;
+  },
+
+  /**
+   * Update user profile
+   * @param {number} id - The user ID
+   * @param {object} userData - The updated user data
+   * @returns {Promise<boolean>} Success status
+   */
+  async updateProfile(id, userData) {
+    const db = await getDbConnection();
+
+    const result = await db.run(
+      "UPDATE users SET username = ?, email = ? WHERE user_id = ?",
+      [userData.username, userData.email, id]
+    );
+
+    return result.changes > 0;
+  },
+
+  /**
    * Delete a user
    * @param {number} id - The user ID
    * @returns {Promise<boolean>} Success status
    */
   async delete(id) {
     const db = await getDbConnection();
-    const result = await db.run(
-      "DELETE FROM users WHERE user_id = ?",
-      id
-    );
-    return result.changes > 0;
+    
+    // Begin transaction
+    await db.run('BEGIN TRANSACTION');
+    
+    try {
+      // Delete all user associations
+      await db.run("DELETE FROM user_companies WHERE user_id = ?", id);
+      await db.run("DELETE FROM user_contacts WHERE user_id = ?", id);
+      await db.run("DELETE FROM user_communications WHERE user_id = ?", id);
+      await db.run("DELETE FROM user_meetings WHERE user_id = ?", id);
+      
+      // Get all user tokens
+      const userTokens = await db.all(
+        "SELECT token_id FROM user_tokens WHERE user_id = ?",
+        id
+      );
+      
+      // Delete user-token associations
+      await db.run("DELETE FROM user_tokens WHERE user_id = ?", id);
+      
+      // Delete tokens
+      if (userTokens.length > 0) {
+        const tokenIds = userTokens.map(t => t.token_id).join(',');
+        await db.run(`DELETE FROM tokens WHERE token_id IN (${tokenIds})`);
+      }
+      
+      // Finally delete the user
+      const result = await db.run("DELETE FROM users WHERE user_id = ?", id);
+      
+      // Commit transaction
+      await db.run('COMMIT');
+      
+      return result.changes > 0;
+    } catch (error) {
+      // Rollback transaction in case of error
+      await db.run('ROLLBACK');
+      throw error;
+    }
   },
 
   /**
@@ -184,5 +303,55 @@ export const usersDb = {
     // Return user without password
     const { password_hash, ...userWithoutPassword } = user;
     return userWithoutPassword;
+  },
+
+  /**
+   * Get all available roles
+   * @returns {Promise<Array>} Array of role objects
+   */
+  async getAllRoles() {
+    const db = await getDbConnection();
+    return db.all("SELECT * FROM roles ORDER BY role_id");
+  },
+  
+  /**
+   * Get all permissions for a role
+   * @param {number} roleId - The role ID
+   * @returns {Promise<Array>} Array of permission objects
+   */
+  async getRolePermissions(roleId) {
+    const db = await getDbConnection();
+    return db.all(`
+      SELECT p.*
+      FROM permissions p
+      JOIN role_permissions rp ON p.permission_id = rp.permission_id
+      WHERE rp.role_id = ?
+      ORDER BY p.permission_name
+    `, roleId);
+  },
+  
+  /**
+   * Get user statistics for admin dashboard
+   * @returns {Promise<object>} User statistics
+   */
+  async getUserStats() {
+    const db = await getDbConnection();
+    
+    const totalUsers = await db.get("SELECT COUNT(*) as count FROM users");
+    const activeUsers = await db.get(
+      "SELECT COUNT(*) as count FROM users WHERE last_login > datetime('now', '-30 day')"
+    );
+    const usersByRole = await db.all(`
+      SELECT r.role_name, COUNT(u.user_id) as count
+      FROM users u
+      JOIN roles r ON u.role_id = r.role_id
+      GROUP BY r.role_name
+    `);
+    
+    return {
+      totalUsers: totalUsers.count,
+      activeUsers: activeUsers.count,
+      usersByRole
+    };
   }
 };
