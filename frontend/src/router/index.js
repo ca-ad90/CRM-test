@@ -73,6 +73,61 @@ const routes = [
         name: "NotFound",
         component: () => import("../views/NotFound.vue")
     },
+
+// Admin routes with special guard
+{
+    path: "/admin",
+    name: "AdminDashboard",
+    component: () => import("../views/admin/AdminDashboard.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+},
+{
+    path: "/admin/users",
+    name: "AdminUsers",
+    component: () => import("../views/admin/AdminUsers.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+},
+{
+    path: "/admin/activity-log",
+    name: "AdminActivityLog",
+    component: () => import("../views/admin/AdminActivityLog.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+},
+{
+    path: "/admin/reports",
+    name: "AdminReports",
+    component: () => import("../views/admin/AdminReports.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+},
+
+// src/router/index.js - Add more admin routes
+
+
+{
+    path: "/admin/companies",
+    name: "AdminCompanies",
+    component: () => import("../views/admin/AdminCompanies.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+},
+// Admin data routes
+{
+    path: "/admin/contacts",
+    name: "AdminContacts",
+    component: () => import("../views/admin/AdminError.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+},
+{
+    path: "/admin/meetings",
+    name: "AdminMeetings",
+    component: () => import("../views/admin/AdminError.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+},
+{
+    path: "/admin/communications",
+    name: "AdminCommunications",
+    component: () => import("../views/admin/AdminError.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true }
+}
 ];
 
 const router = createRouter({
@@ -80,12 +135,31 @@ const router = createRouter({
     routes,
 });
 
-// Navigation guards
+
 router.beforeEach((to, from, next) => {
     const authStore = useAuthStore();
 
     // Check if route requires authentication
     if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+        next({ name: 'Login' });
+    }
+    // Check if route requires guest access only
+    else if (to.meta.requiresGuest && authStore.isAuthenticated) {
+        next({ name: 'Dashboard' });
+    }
+    else {
+        next();
+    }
+});
+router.beforeEach((to, from, next) => {
+    const authStore = useAuthStore();
+
+    // Check if route requires admin access
+    if (to.meta.requiresAdmin && authStore.user?.role_id !== 1) {
+        next({ name: 'Dashboard' });
+    }
+    // Check if route requires authentication
+    else if (to.meta.requiresAuth && !authStore.isAuthenticated) {
         next({ name: 'Login' });
     }
     // Check if route requires guest access only

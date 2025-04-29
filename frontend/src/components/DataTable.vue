@@ -166,8 +166,6 @@ import {
     TrashIcon,
 } from "@heroicons/vue/24/outline";
 import { ref, computed, watch, onMounted } from "vue";
-import { useCompanyStore } from "../stores/companies";
-import { useContactStore } from "../stores/contacts";
 
 
 const { data, headings, idKey} = defineProps({

@@ -45,7 +45,7 @@ export const tokensDb = {
 
     // Get token with user information, including admin status
     const result = await db.get(
-      `SELECT t.token_id, t.expires_at, t.is_valid, u.user_id, u.username, u.email, u.is_admin
+      `SELECT t.token_id, t.expires_at, t.is_valid, u.user_id, u.username, u.email, u.role_id
        FROM tokens t
        JOIN user_tokens ut ON t.token_id = ut.token_id
        JOIN users u ON ut.user_id = u.user_id
@@ -71,7 +71,7 @@ export const tokensDb = {
       user_id: result.user_id,
       username: result.username,
       email: result.email,
-      is_admin: result.is_admin === 1
+      role_id: result.role_id
     };
   },
 

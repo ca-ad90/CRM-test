@@ -6,6 +6,7 @@ import { usersDb } from '../db/users.js';
  * Sets req.userId, req.user and req.permissions if authenticated
  */
 export const authenticate = async (req, res, next) => {
+  console.log("authenticate")
   try {
     // Get token from cookies or Authorization header
     const token = req.cookies?.authToken ||
@@ -77,6 +78,7 @@ export const requirePermission = (requiredPermissions) => {
  * Sets req.userId, req.user and req.permissions if token is valid, but doesn't require it
  */
 export const optionalAuth = async (req, res, next) => {
+  console.log("optionalAuth")
   try {
     // Get token from cookies or Authorization header
     const token = req.cookies?.authToken ||
@@ -95,7 +97,7 @@ export const optionalAuth = async (req, res, next) => {
         req.permissions = await usersDb.getUserPermissions(user.user_id);
       }
     }
-
+    console.log(req.user)
     next();
   } catch (error) {
     // Just continue without authentication
@@ -107,10 +109,10 @@ export const optionalAuth = async (req, res, next) => {
  * Middleware to check if user is an admin
  */
 export const requireAdmin = (req, res, next) => {
+  console.log(req.user)
   if (req.user?.role_id !== 1) {
     return res.status(403).json({ error: "Admin access required" });
   }
-
   next();
 };
 
@@ -171,7 +173,7 @@ export const checkResourceAccess = (resourceType) => {
  */
 export const logActivity = async (userId, actionType, entityType, entityId, details, ip) => {
   try {
-    const db = await (await import('./connection.js')).getDbConnection();
+    const db = await (await import('../db/connection.js')).getDbConnection();
 
     await db.run(
       `INSERT INTO activity_log

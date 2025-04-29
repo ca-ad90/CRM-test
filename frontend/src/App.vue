@@ -1,25 +1,22 @@
+<!-- src/App.vue - Update the navigation section -->
 <template>
     <div class="min-h-screen flex flex-col">
         <header v-if="authStore.isAuthenticated" class="bg-white shadow">
             <div class="container mx-auto px-4">
                 <div class="flex justify-between items-center py-4">
-                    <router-link to="/" class="text-2xl font-bold text-blue-600"
-                        >CRM System</router-link
-                    >
+                    <router-link to="/" class="text-2xl font-bold text-blue-600">CRM System</router-link>
+
                     <nav class="flex space-x-4">
-                        <router-link to="/" class="nav-link"
-                            >Dashboard</router-link
-                        >
-                        <router-link to="/companies" class="nav-link"
-                            >Companies</router-link
-                        >
-                        <router-link to="/contacts" class="nav-link"
-                            >Contacts</router-link
-                        >
-                        <router-link to="/meetings" class="nav-link"
-                            >Meetings</router-link
-                        >
+                        <router-link to="/" class="nav-link">Dashboard</router-link>
+                        <router-link to="/companies" class="nav-link">Companies</router-link>
+                        <router-link to="/contacts" class="nav-link">Contacts</router-link>
+                        <router-link to="/meetings" class="nav-link">Meetings</router-link>
+                        <!-- Admin Navigation -->
+                        <router-link v-if="authStore.isAdmin" to="/admin" class="nav-link">
+                            Admin
+                        </router-link>
                     </nav>
+
                     <div class="flex items-center space-x-4">
                         <SearchBar />
                         <div class="relative">
@@ -29,6 +26,10 @@
                             >
                                 <UserCircleIcon class="h-6 w-6" />
                                 <span>{{ authStore.user?.username || 'User' }}</span>
+                                <span v-if="authStore.user?.role === 'admin'"
+                                      class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
+                                    Admin
+                                </span>
                                 <ChevronDownIcon class="h-4 w-4" />
                             </button>
 
@@ -36,6 +37,14 @@
                                 v-if="showUserMenu"
                                 class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10"
                             >
+                                <router-link
+                                    v-if="authStore.isAdmin"
+                                    to="/admin"
+                                    class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    @click="showUserMenu = false"
+                                >
+                                    Admin Dashboard
+                                </router-link>
                                 <button
                                     @click="logout"
                                     class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -66,10 +75,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from './stores/auth';
-import { useToast } from 'vue-toastification';
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "./stores/auth";
+import { useToast } from "vue-toastification";
 import SearchBar from "./components/SearchBar.vue";
 import { UserCircleIcon, ChevronDownIcon } from "@heroicons/vue/24/solid";
 
@@ -79,18 +88,20 @@ const toast = useToast();
 const showUserMenu = ref(false);
 
 const toggleUserMenu = () => {
+    console.log(showUserMenu.value);
     showUserMenu.value = !showUserMenu.value;
 };
 
 const logout = async () => {
     await authStore.logout();
-    toast.info('You have been logged out');
-    router.push('/login');
+    toast.info("You have been logged out");
+    router.push("/login");
     showUserMenu.value = false;
 };
 
 // Close the user menu when clicking outside
-window.addEventListener('click', (event) => {
+window.addEventListener("click", (event) => {
+    if (!event.target.closest(".user-menu")) return;
     if (showUserMenu.value) {
         showUserMenu.value = false;
     }

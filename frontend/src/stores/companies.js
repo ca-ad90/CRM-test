@@ -9,10 +9,14 @@ export const useCompanyStore = defineStore("companies", {
         error: null,
     }),
     actions: {
-        async fetchCompanies() {
+        async fetchCompanies(isAdmin = false) {
+            let getUrl = "/api/companies";
+            if (isAdmin) {
+                getUrl = "/api/admin/companies";
+            }
             this.loading = true;
             try {
-                const response = await axios.get("/api/companies");
+                const response = await axios.get(getUrl);
                 this.companies = response.data;
                 this.error = null;
             } catch (err) {

@@ -9,13 +9,19 @@ export const useAuthStore = defineStore("auth", {
         error: null,
     }),
 
-    getters: {
-        isAuthenticated: (state) => !!state.user,
-        userFullName: (state) => {
-            if (!state.user) return '';
-            return `${state.user.username}`;
-        },
+// src/stores/auth.js - Update the store to handle roles and permissions
+
+// Add isAdmin getter
+getters: {
+    isAuthenticated: (state) => !!state.user,
+    userFullName: (state) => {
+        if (!state.user) return '';
+        return `${state.user.username}`;
     },
+    isAdmin: (state) => state.user?.role_id === 1,
+},
+
+// Update login handler to store role information
 
     actions: {
         /**
@@ -53,35 +59,40 @@ export const useAuthStore = defineStore("auth", {
          * @param {object} credentials - The login credentials
          * @returns {Promise<boolean>} Success status
          */
-        async login(credentials) {
-            this.loading = true;
-            this.error = null;
 
-            try {
-                const response = await axios.post("/api/auth/login", credentials, {
-                    withCredentials: true // Important for cookies
-                });
+async login(credentials) {
+    console.log("store login");
+    this.loading = true;
+    this.error = null;
 
-                this.user = response.data.user;
-                this.token = response.data.token;
+    try {
+        const response = await axios.post("/api/auth/login", credentials, {
+            withCredentials: true // Important for cookies
+        });
+        console.log(response.data);
+        this.user = {
+            ...response.data.user,
+            role_id: response.data.user.role === 'admin' ? 1 : 2,
+            role: response.data.user.role
+        };
+        this.token = response.data.token;
 
-                // Set the token in axios headers for all future requests
-                axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+        // Set the token in axios headers for all future requests
+        axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
 
-                // Store auth details in localStorage (optional, as we're using cookies too)
-                localStorage.setItem('user', JSON.stringify(response.data.user));
-                localStorage.setItem('token', response.data.token);
+        // Store auth details in localStorage (optional, as we're using cookies too)
+        localStorage.setItem('user', JSON.stringify(this.user));
+        localStorage.setItem('token', response.data.token);
 
-                return true;
-            } catch (err) {
-                this.error = err.response?.data?.error || "Login failed";
-                console.error(this.error);
-                return false;
-            } finally {
-                this.loading = false;
-            }
-        },
-
+        return true;
+    } catch (err) {
+        this.error = err.response?.data?.error || "Login failed";
+        console.error(this.error);
+        return false;
+    } finally {
+        this.loading = false;
+    }
+},
         /**
          * Logout the user
          */
@@ -180,5 +191,6 @@ export const useAuthStore = defineStore("auth", {
         clearError() {
             this.error = null;
         }
+
     }
 });

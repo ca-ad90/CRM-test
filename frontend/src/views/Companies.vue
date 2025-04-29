@@ -51,7 +51,7 @@
             </button>
         </div>
         <div v-else class="overflow-x-auto shadow-md rounded-lg">
-            <DataTable :data="companies" :headings="{company_name: 'Company Name', contacts: 'Contacts', website: 'Website'}" :idKey="'company_id'" @toggleAccordion="toggleAccordion">
+            <DataTable :data="companies" :headings="{company_name: 'Company Name', contacts: 'Contacts', website: 'Website', priority: 'Priority'}" :idKey="'company_id'" @toggleAccordion="toggleAccordion">
             <template #company_name="{item}">
                 <router-link
                             :to="`/companies/${item.company_id}`"
